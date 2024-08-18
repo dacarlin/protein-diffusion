@@ -18,7 +18,6 @@ def main():
         device = torch.device("cuda")
     else:
         device = torch.device("cpu")
-    device = torch.device("cpu")
 
     print(f"Using device: {device}")
     
@@ -27,7 +26,7 @@ def main():
     
     # Initialize model and diffusion process
     model = UNetDenoisingModel().to(device)
-    diffusion = ProteinDiffusion()
+    diffusion = ProteinDiffusion(device=device)
     
     # Train the model
     train(model, diffusion, dataloader, num_epochs=epochs, device=device)

@@ -8,6 +8,7 @@ def train(model, diffusion, dataloader, num_epochs, device):
         epoch_loss = 0.0
         for batch in dataloader:
             batch = batch.to(device)
+            
             t = torch.randint(0, diffusion.num_steps, (batch.shape[0],), device=device)
             x_t, noise = diffusion.q_sample(batch, t)
             predicted_noise = model(x_t, t)

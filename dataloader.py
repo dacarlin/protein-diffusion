@@ -20,7 +20,7 @@ class ProteinDataset(Dataset):
                 for residue in chain:
                     if 'CA' in residue:
                         coords.append(residue['CA'].get_coord())
-        coords = torch.tensor(np.array(coords), dtype=torch.float32)  # Ensure coords is a 2D numpy array before conversion
+        coords = torch.tensor(np.array(coords), dtype=torch.float32)
         return coords
 
 def pad_collate_fn(batch):

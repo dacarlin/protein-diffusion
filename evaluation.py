@@ -18,3 +18,9 @@ def evaluate_model(model, dataloader):
     avg_rmsd = np.mean(rmsds)
     print(f"Average RMSD: {avg_rmsd:.4f}")
     return avg_rmsd
+
+import numpy as np
+
+def compute_rmsd(true_coords, pred_coords):
+    rmsd = np.sqrt(np.mean(np.sum((true_coords - pred_coords)**2, axis=-1)))
+    return rmsd

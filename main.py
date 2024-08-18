@@ -1,7 +1,9 @@
+import torch
 from dataloader import get_dataloader
-from model import DenoisingDiffusionModel
+from model import UNetDenoisingModel
+from diffusion import ProteinDiffusion
 from training import train
-from evaluation import evaluate_model
+from evaluation import compute_rmsd
 
 def main():
     pdb_dir = 'data'  # Directory containing your PDB files without extensions
@@ -9,17 +11,26 @@ def main():
     epochs = 100
     learning_rate = 1e-4
 
-    # Prepare DataLoader
-    dataloader = get_dataloader(pdb_dir, batch_size)
+    # Check if MPS is available
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+    device = torch.device("cpu")
 
-    # Initialize the model
-    model = DenoisingDiffusionModel()
-
+    print(f"Using device: {device}")
+    
+    # Initialize dataset and dataloader
+    dataloader = get_dataloader(pdb_dir, batch_size=batch_size)
+    
+    # Initialize model and diffusion process
+    model = UNetDenoisingModel().to(device)
+    diffusion = ProteinDiffusion()
+    
     # Train the model
-    train(model, dataloader, epochs=epochs, lr=learning_rate)
-
-    # Evaluate the model
-    evaluate_model(model, dataloader)
+    train(model, diffusion, dataloader, num_epochs=epochs, device=device)
 
 if __name__ == "__main__":
     main()

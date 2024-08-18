@@ -2,6 +2,7 @@ import os
 import torch
 from torch.utils.data import Dataset, DataLoader
 from Bio.PDB import PDBParser
+import numpy as np
 
 class ProteinDataset(Dataset):
     def __init__(self, pdb_dir):
@@ -19,9 +20,18 @@ class ProteinDataset(Dataset):
                 for residue in chain:
                     if 'CA' in residue:
                         coords.append(residue['CA'].get_coord())
-        coords = torch.tensor(coords, dtype=torch.float32)
+        coords = torch.tensor(np.array(coords), dtype=torch.float32)  # Ensure coords is a 2D numpy array before conversion
         return coords
+
+def pad_collate_fn(batch):
+    max_len = max(coords.shape[0] for coords in batch)
+    padded_batch = []
+    for coords in batch:
+        pad_size = max_len - coords.shape[0]
+        padded_coords = torch.nn.functional.pad(coords, (0, 0, 0, pad_size), mode='constant', value=0)
+        padded_batch.append(padded_coords)
+    return torch.stack(padded_batch, dim=0)
 
 def get_dataloader(pdb_dir, batch_size=2):
     dataset = ProteinDataset(pdb_dir)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=pad_collate_fn)

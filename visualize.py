@@ -13,7 +13,8 @@ def plot_protein(ax, coords):
     ax.set_title('Sampled Protein Structure')
 
 def create_protein_animation(sample_dir, output_file):
-    sample_files = sorted([f for f in os.listdir(sample_dir) if f.endswith('.npy')])
+    sample_files = sorted([f for f in os.listdir(sample_dir) if f.endswith('.npy')], key=lambda x:int(x.split('_')[2].split('.')[0]))
+    print(sample_files)
     
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(111, projection='3d')
@@ -21,7 +22,7 @@ def create_protein_animation(sample_dir, output_file):
     def update(frame):
         coords = np.load(os.path.join(sample_dir, sample_files[frame]))
         plot_protein(ax, coords)
-        ax.set_title(f'Sampled Protein Structure (Epoch {(frame+1)*5})')
+        ax.set_title(f'Sampled Protein Structure (Epoch {(frame+1)})')
     
     anim = FuncAnimation(fig, update, frames=len(sample_files), interval=500, repeat_delay=1000)
     anim.save(output_file, writer='pillow', fps=2)
@@ -51,7 +52,7 @@ if __name__ == "__main__":
     # Uncomment one of the following lines based on your preference:
     
     # For live visualization during training:
-    visualize_live(sample_dir)
+    #visualize_live(sample_dir)
     
     # For creating an animation after training:
-    #create_protein_animation(sample_dir, 'protein_evolution.gif')
+    create_protein_animation(sample_dir, 'protein_evolution.gif')

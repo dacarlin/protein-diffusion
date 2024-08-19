@@ -1,12 +1,11 @@
-import os
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 from Bio.PDB import PDBParser
 import numpy as np
 
 class ProteinDataset(Dataset):
-    def __init__(self, pdb_dir):
-        self.pdb_files = [os.path.join(pdb_dir, f) for f in os.listdir(pdb_dir)]
+    def __init__(self, pdb_files):
+        self.pdb_files = pdb_files
         self.parser = PDBParser(QUIET=True)
 
     def __len__(self):

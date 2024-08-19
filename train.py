@@ -6,6 +6,12 @@ from evaluation import compute_rmsd
 import torch.nn.functional as F
 import os
 import numpy as np
+from random import seed, shuffle 
+
+
+torch.manual_seed(99)
+seed(99)
+
 
 def sample_protein(model, diffusion, length, device):
     model.eval()
@@ -15,21 +21,31 @@ def sample_protein(model, diffusion, length, device):
     return x.squeeze(0)
 
 def main():
-    pdb_dir = 'data/train'
-    val_dir = 'data/val'
+    # run params 
+    pdb_dir = 'data/dompdb'
     batch_size = 32
     num_epochs = 100
     learning_rate = 1e-4
     sample_length = 100  # Length of protein to sample
     sample_interval = 1  # Sample every 5 epochs
+    max_samples = 100 
 
+    # create device 
     device = torch.device("mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
-    train_dataset = ProteinDataset(pdb_dir)
+    # load datasets
+    pdb_files = [os.path.join(pdb_dir, f) for f in os.listdir(pdb_dir)][:max_samples]
+    shuffle(pdb_files)
+    n1 = int(0.9 * len(pdb_files))
+    train_files = pdb_files[:n1]
+    val_files = pdb_files[n1:]
+    print(f"train_samples={len(train_files)} val_samples={len(val_files)}")
+
+    train_dataset = ProteinDataset(train_files)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=pad_collate_fn)
     
-    val_dataset = ProteinDataset(val_dir)
+    val_dataset = ProteinDataset(val_files)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=pad_collate_fn)
     
     model = UNetDenoisingModel().to(device)

@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class ProteinDiffusion:
-    def __init__(self, num_steps=1000, beta_start=1e-4, beta_end=0.02, device="cpu"):
+    def __init__(self, num_steps=200, beta_start=1e-4, beta_end=0.02, device="cpu"):
         self.num_steps = num_steps
         self.beta = torch.linspace(beta_start, beta_end, num_steps, device=device)
         self.alpha = 1 - self.beta

@@ -24,7 +24,7 @@ def create_protein_animation(sample_dir, output_file):
         plot_protein(ax, coords)
         ax.set_title(f'Sampled Protein Structure (Epoch {(frame+1)})')
     
-    anim = FuncAnimation(fig, update, frames=len(sample_files), interval=500, repeat_delay=1000)
+    anim = FuncAnimation(fig, update, frames=len(sample_files), interval=50, repeat_delay=1000)
     anim.save(output_file, writer='pillow', fps=2)
     plt.close(fig)
 

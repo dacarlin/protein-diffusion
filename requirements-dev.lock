@@ -10,30 +10,69 @@
 #   universal: false
 
 -e file:.
+absl-py==2.1.0
+    # via tensorboard
 biopython==1.84
     # via protein-diffusion
-einops==0.8.0
-    # via protein-diffusion
+contourpy==1.2.1
+    # via matplotlib
+cycler==0.12.1
+    # via matplotlib
 filelock==3.15.4
     # via torch
+fonttools==4.53.1
+    # via matplotlib
 fsspec==2024.6.1
     # via torch
+grpcio==1.65.5
+    # via tensorboard
 jinja2==3.1.4
     # via torch
+kiwisolver==1.4.5
+    # via matplotlib
+markdown==3.7
+    # via tensorboard
 markupsafe==2.1.5
     # via jinja2
+    # via werkzeug
+matplotlib==3.9.2
+    # via protein-diffusion
 mpmath==1.3.0
     # via sympy
 networkx==3.3
     # via torch
 numpy==2.0.1
     # via biopython
+    # via contourpy
+    # via matplotlib
     # via protein-diffusion
+    # via tensorboard
+packaging==24.1
+    # via matplotlib
+    # via tensorboard
+pillow==10.4.0
+    # via matplotlib
+protobuf==5.27.3
+    # via tensorboard
+pyparsing==3.1.2
+    # via matplotlib
+python-dateutil==2.9.0.post0
+    # via matplotlib
 setuptools==72.2.0
+    # via tensorboard
     # via torch
+six==1.16.0
+    # via python-dateutil
+    # via tensorboard
 sympy==1.13.2
     # via torch
+tensorboard==2.17.1
+    # via protein-diffusion
+tensorboard-data-server==0.7.2
+    # via tensorboard
 torch==2.4.0
     # via protein-diffusion
 typing-extensions==4.12.2
     # via torch
+werkzeug==3.0.3
+    # via tensorboard

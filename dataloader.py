@@ -8,8 +8,9 @@ class ProteinDataset(Dataset):
     """Dataset that lets us immediately begin stepping and holds nothing in memory
     (instead reading from disk every time)"""
 
-    def __init__(self, pdb_files):
+    def __init__(self, pdb_files, max_length=512):
         self.pdb_files = pdb_files
+        self.max_length = max_length
         self.parser = PDBParser(QUIET=True)
 
     def __len__(self):
@@ -23,7 +24,7 @@ class ProteinDataset(Dataset):
                 for residue in chain:
                     if "CA" in residue:
                         coords.append(residue["CA"].get_coord())
-        coords = torch.tensor(np.array(coords), dtype=torch.float32)
+        coords = torch.tensor(np.array(coords[:self.max_length]), dtype=torch.float32)
         return coords
 
 
@@ -31,8 +32,9 @@ class InMemoryProteinDataset(Dataset):
     """Dataset that holds everything in memory, and that allows graceful handling
     of bad input files"""
 
-    def __init__(self, pdb_files):
+    def __init__(self, pdb_files, max_length=512):
         self.pdb_files = pdb_files
+        self.max_length = max_length
         self.parser = PDBParser(QUIET=True)
         self.samples = []
         for idx in range(len(self.pdb_files)):
@@ -43,7 +45,7 @@ class InMemoryProteinDataset(Dataset):
                     for residue in chain:
                         if "CA" in residue:
                             coords.append(residue["CA"].get_coord())
-            coords = torch.tensor(np.array(coords), dtype=torch.float32)
+            coords = torch.tensor(np.array(coords[:self.max_length]), dtype=torch.float32)
             self.samples.append(coords)
 
     def __len__(self):

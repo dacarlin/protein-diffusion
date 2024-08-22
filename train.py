@@ -22,7 +22,7 @@ seed(99)
 def main():
     # run params
     pdb_dir = "data/dompdb"
-    batch_size = 32
+    batch_size = 64
     num_epochs = 100
     learning_rate = 1e-4
     sample_length = 100  # length of protein to sample
@@ -51,7 +51,7 @@ def main():
     # create dataloaders 
     train_dataset = ProteinDataset(train_files)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=pad_collate_fn)
-    val_dataset = ProteinDataset(train_files)
+    val_dataset = ProteinDataset(val_files)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=pad_collate_fn)
 
     # model = DenoisingDiffusionModel().to(device)

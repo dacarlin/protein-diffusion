@@ -15,6 +15,57 @@ def sample_protein(model, diffusion, length, device):
     return x.squeeze(0)
 
 
+import torch
+import torch.nn as nn
+
+
+class AFBackboneRepresentation(nn.Module):
+    def __init__(self):
+        super(AFBackboneRepresentation, self).__init__()
+        
+    def forward(self, positions):
+        """
+        Compute the local frames for each residue's backbone.
+        
+        Args:
+        positions: Tensor of shape (num_residues, 4, 3) containing the coordinates 
+                   of N, CA, C, O atoms for each residue.
+        
+        Returns:
+        frames: Tensor of shape (num_residues, 4, 4) containing the rotation matrix
+                and translation vector for each residue's local frame.
+        """
+        N, CA, C = positions[:, 0], positions[:, 1], positions[:, 2]
+        
+        # Compute the local coordinate system
+        t = CA - N
+        x = normalize(C - N)
+        z = normalize(torch.cross(t, x))
+        y = torch.cross(z, x)
+        
+        # Create rotation matrices
+        rot_mats = torch.stack([x, y, z], dim=-1)
+        
+        # Create translation vectors (CA atom positions)
+        trans = CA
+        
+        # Combine rotation and translation into 4x4 transformation matrices
+        zeros = torch.zeros_like(trans[:, :1])
+        ones = torch.ones_like(zeros)
+        
+        frames = torch.cat([
+            torch.cat([rot_mats, trans.unsqueeze(-1)], dim=-1),
+            torch.cat([zeros, zeros, zeros, ones], dim=-1).unsqueeze(1)
+        ], dim=1)
+        
+        return frames
+
+
+def normalize(v):
+    """Normalize a vector."""
+    return v / torch.norm(v, dim=-1, keepdim=True)
+
+
 class ProteinDiffusion:
     def __init__(
         self, num_steps=num_steps, beta_start=0.01, beta_end=0.07, device="cpu"

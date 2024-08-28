@@ -13,6 +13,7 @@ import os
 import numpy as np
 from random import seed, shuffle
 from torch.utils.tensorboard import SummaryWriter
+# from se3_transformer_pytorch import SE3Transformer
 
 
 torch.manual_seed(99)
@@ -57,6 +58,21 @@ def main():
     # model = DenoisingDiffusionModel().to(device)
     model = SE3Transformer(hidden_dim=128).to(device)
     # model = torch.compile(model)
+
+    # model = SE3Transformer(
+    #     dim = 512,
+    #     heads = 8,
+    #     depth = 6,
+    #     dim_head = 64,
+    #     num_degrees = 4,
+    #     valid_radius = 10
+    # )
+
+    # feats = torch.randn(1, 1024, 512)
+    # coors = torch.randn(1, 1024, 3)
+    # mask  = torch.ones(1, 1024).bool()
+
+    # out = model(feats, coors, mask) # (1, 1024, 512)
     diffusion = ProteinDiffusion(device=device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -98,6 +114,9 @@ def main():
                 predicted_noise = model(x_t, t)
                 val_loss += F.mse_loss(predicted_noise, noise).item()
                 val_rmsd += compute_rmsd(batch.cpu().numpy(), x_t.cpu().numpy())
+                #val_rmsd += compute_rmsd(batch.cpu().numpy(), (x_t - predicted_noise).cpu().numpy())  
+                # perhaps we want this second line instead: RMSD between the real data and the noised structure with predicted noise removed, ie the denoised structure 
+
 
         val_loss /= len(val_dataloader)
         val_rmsd /= len(val_dataloader)

@@ -59,7 +59,11 @@ def generate_and_save_sample(model, diffusion, max_protein_length, step, device)
     ax.set_title(f"Generated Protein Structure at Step {step}")
     plt.savefig(f"samples/generated_step_{step}.png")
     plt.close()
-    #xyz_to_pdb(x, "samples/generated_step_{step}.pdb")
+    try:
+        xyz_to_pdb(x, "samples/generated_step_{step}.pdb")
+    except Exception as e:
+        print(f"{x.shape=}")
+        print(e) 
     model.train()
 
 

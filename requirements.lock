@@ -19,9 +19,9 @@ contourpy==1.2.1
 cycler==0.12.1
     # via matplotlib
 einops==0.8.0
-    # via se3-transformer-pytorch
+    # via Mystery-transformer-pytorch
 filelock==3.15.4
-    # via se3-transformer-pytorch
+    # via Mystery-transformer-pytorch
     # via torch
 fonttools==4.53.1
     # via matplotlib
@@ -49,7 +49,7 @@ numpy==2.0.1
     # via contourpy
     # via matplotlib
     # via protein-diffusion
-    # via se3-transformer-pytorch
+    # via Mystery-transformer-pytorch
     # via tensorboard
 packaging==24.1
     # via matplotlib
@@ -62,7 +62,7 @@ pyparsing==3.1.2
     # via matplotlib
 python-dateutil==2.9.0.post0
     # via matplotlib
-se3-transformer-pytorch==0.9.0
+Mystery-transformer-pytorch==0.9.0
     # via protein-diffusion
 setuptools==72.2.0
     # via tensorboard
@@ -78,7 +78,7 @@ tensorboard-data-server==0.7.2
     # via tensorboard
 torch==2.4.0
     # via protein-diffusion
-    # via se3-transformer-pytorch
+    # via Mystery-transformer-pytorch
 typing-extensions==4.12.2
     # via torch
 werkzeug==3.0.3

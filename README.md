@@ -27,7 +27,7 @@ In the `model.py` file, you'll see the implementation of the diffusion process a
 
 - `DenoisingDiffusionModel` which is similar to models used to denoise 3D point clouds and is not expected to perform particularly well on this task 
 - `RegularTransformer` which is a plain transformer model (same caveat, these are baseline models that we are going to demonstrate improvement over)
-- `SE3Transformer` which is a simple SE(3)-equivariant transformer implementation that should perform better than the other models 
+- `MysteryTransformer` which is a simple SE(3)-equivariant transformer implementation that should perform better than the other models 
 
 
 ### Data representation 

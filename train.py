@@ -35,6 +35,17 @@ def visualize_batch(original, noisy, step):
     plt.close()
 
 
+def xyz_to_pdb(xyz_tensor, pdb_file):
+    """Create a poly-Gly peptide PDB file from a tensor of CA coordiates (L, 3)"""
+
+    with open(pdb_file, 'w') as f:
+        xyz = xyz_tensor.tolist()
+        for i, line in enumerate(xyz, start=1):
+            x, y, z = line 
+            f.write(f"ATOM  {i:5d}  CA  GLY A{i:4d}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00  0.00           C  \n")
+        f.write("END\n")
+
+
 def generate_and_save_sample(model, diffusion, max_protein_length, step, device):
     model.eval()
     with torch.no_grad():
@@ -48,13 +59,14 @@ def generate_and_save_sample(model, diffusion, max_protein_length, step, device)
     ax.set_title(f"Generated Protein Structure at Step {step}")
     plt.savefig(f"samples/generated_step_{step}.png")
     plt.close()
+    #xyz_to_pdb(x, "samples/generated_step_{step}.pdb")
     model.train()
 
 
 def main():
     # run params
     pdb_dir = "data/dompdb"
-    batch_size = 128
+    batch_size = 8
     num_epochs = 50
     learning_rate = 1e-4
     sample_length = 200  # length of protein to sample
@@ -88,8 +100,9 @@ def main():
     val_dataset = ProteinDataset(val_files)
     val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=pad_collate_fn)
 
-    # Initialize the SE3-equivariant transformer model
-    model = SE3Transformer().to(device)
+    # Initialize the Mystery-equivariant transformer model
+    model = SE3Transformer(hidden_dim=128).to(device)
+    print(f"Model params: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}")
 
     # Initialize the diffusion process
     diffusion = ProteinDiffusion(device=device)

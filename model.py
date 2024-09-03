@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import TransformerEncoder, TransformerEncoderLayer
+import math
 
 
 num_steps = 200
@@ -13,56 +13,6 @@ def sample_protein(model, diffusion, length, device):
     for t in reversed(range(diffusion.num_steps)):
         x = diffusion.p_sample(model, x, t)
     return x.squeeze(0)
-
-
-class AFBackboneRepresentation(nn.Module):
-    def __init__(self):
-        super(AFBackboneRepresentation, self).__init__()
-
-    def forward(self, positions):
-        """
-        Compute the local frames for each residue's backbone.
-
-        Args:
-        positions: Tensor of shape (num_residues, 4, 3) containing the coordinates
-                   of N, CA, C, O atoms for each residue.
-
-        Returns:
-        frames: Tensor of shape (num_residues, 4, 4) containing the rotation matrix
-                and translation vector for each residue's local frame.
-        """
-        N, CA, C = positions[:, 0], positions[:, 1], positions[:, 2]
-
-        # Compute the local coordinate system
-        t = CA - N
-        x = normalize(C - N)
-        z = normalize(torch.cross(t, x))
-        y = torch.cross(z, x)
-
-        # Create rotation matrices
-        rot_mats = torch.stack([x, y, z], dim=-1)
-
-        # Create translation vectors (CA atom positions)
-        trans = CA
-
-        # Combine rotation and translation into 4x4 transformation matrices
-        zeros = torch.zeros_like(trans[:, :1])
-        ones = torch.ones_like(zeros)
-
-        frames = torch.cat(
-            [
-                torch.cat([rot_mats, trans.unsqueeze(-1)], dim=-1),
-                torch.cat([zeros, zeros, zeros, ones], dim=-1).unsqueeze(1),
-            ],
-            dim=1,
-        )
-
-        return frames
-
-
-def normalize(v):
-    """Normalize a vector."""
-    return v / torch.norm(v, dim=-1, keepdim=True)
 
 
 class ProteinDiffusion:
@@ -285,40 +235,29 @@ class RegularTransformerLayer(nn.Module):
         return output
 
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+class SE3PositionalEncoding(nn.Module):
+    def __init__(self, hidden_dim, max_len=1000):
+        super(SE3PositionalEncoding, self).__init__()
+        self.hidden_dim = hidden_dim
+        self.max_len = max_len
 
+        # Create a learnable parameter for each relative position
+        self.relative_positions = nn.Parameter(torch.randn(2 * max_len - 1, hidden_dim))
 
-class TensorProductLayer(nn.Module):
-    def __init__(self, input_dim, output_dim):
-        super(TensorProductLayer, self).__init__()
-        # Initialize weights and biases
-        self.weight = nn.Parameter(torch.randn(input_dim, output_dim))
-        self.bias = nn.Parameter(torch.randn(output_dim))
+    def forward(self, x):
+        # x shape: (batch_size, seq_len, hidden_dim)
+        seq_len = x.size(1)
 
-    def forward(self, x, mask):
-        # x shape: (batch_size, seq_len, input_dim)
-        # self.weight shape: (input_dim, output_dim)
-        # mask shape: (batch_size, seq_len, input_dim)
-        batch_size, seq_len, input_dim = x.shape
+        # Create a range of relative positions
+        positions = torch.arange(seq_len, device=x.device).unsqueeze(1) - torch.arange(
+            seq_len, device=x.device
+        ).unsqueeze(0)
+        positions += self.max_len - 1  # Shift to positive indices
 
-        # Perform tensor product operation
-        # This is equivalent to applying a different linear transformation to each 'i' slice of the input
-        # Gradient flows through this operation to both x and self.weight
-        output = torch.einsum("bik,ko->bio", x, self.weight) + self.bias
+        # Get the corresponding encodings
+        relative_encodings = self.relative_positions[positions]
 
-        return output * mask.unsqueeze(-1)  # Apply mask
-
-    # Visualization suggestion:
-    # def visualize_weights(self):
-    #     plt.figure(figsize=(10, 5))
-    #     plt.imshow(self.weight.detach().cpu().numpy(), cmap='viridis')
-    #     plt.colorbar()
-    #     plt.title('TensorProductLayer Weights')
-    #     plt.xlabel('Output Dimension')
-    #     plt.ylabel('Input Dimension')
-    #     plt.show()
+        return relative_encodings  # Shape: (seq_len, seq_len, hidden_dim)
 
 
 class EquivariantAttention(nn.Module):
@@ -327,100 +266,135 @@ class EquivariantAttention(nn.Module):
         self.num_heads = num_heads
         self.hidden_dim = hidden_dim
 
-        # Linear projections for query, key, and value
+        # Projections for query, key, value
         self.qkv_proj = nn.Linear(hidden_dim, 3 * hidden_dim)
         # Output projection
         self.fc_out = nn.Linear(hidden_dim, hidden_dim)
 
-    def forward(self, x, geometric_features, mask):
-        # Compute queries, keys, values
-        # Shape: (batch_size, seq_len, 3, hidden_dim)
-        qkv = self.qkv_proj(x).view(x.shape[0], x.shape[1], 3, self.hidden_dim)
-        q, k, v = qkv[:, :, 0], qkv[:, :, 1], qkv[:, :, 2]
+        # Projection for geometric features
+        self.geo_proj = nn.Linear(2, num_heads)
 
-        # Compute 3D Euclidean distances between all pairs of points
-        # Shape: (batch_size, seq_len, seq_len)
-        distances = torch.cdist(geometric_features, geometric_features)
+        # Projection for positional encodings
+        self.pos_proj = nn.Linear(hidden_dim, num_heads)
+
+    def forward(self, x, geometric_features, positional_encodings, mask):
+        # x shape: (batch_size, seq_len, hidden_dim)
+        # geometric_features shape: (batch_size, seq_len, seq_len, 2)
+        # positional_encodings shape: (seq_len, seq_len, hidden_dim)
+        # mask shape: (batch_size, seq_len)
+        batch_size, seq_len, _ = x.shape
+
+        # Project input to query, key, value
+        qkv = self.qkv_proj(x).view(batch_size, seq_len, 3, self.num_heads, -1)
+        q, k, v = (
+            qkv[:, :, 0],
+            qkv[:, :, 1],
+            qkv[:, :, 2],
+        )  # Each has shape (batch_size, seq_len, num_heads, head_dim)
+
+        # Project geometric features
+        geo_weights = self.geo_proj(geometric_features).permute(
+            0, 3, 1, 2
+        )  # (batch_size, num_heads, seq_len, seq_len)
+
+        # Project positional encodings
+        pos_weights = self.pos_proj(positional_encodings)
+        pos_weights = (
+            pos_weights.unsqueeze(0).expand(batch_size, -1, -1, -1).permute(0, 3, 1, 2)
+        )  # (batch_size, num_heads, seq_len, seq_len)
 
         # Compute attention scores
-        # Shape: (batch_size, seq_len, seq_len)
-        attention_weights = torch.einsum("bik,bjk->bij", q, k) / torch.sqrt(
-            torch.tensor(self.hidden_dim)
+        attention_weights = torch.einsum("bihd,bjhd->bhij", q, k) / math.sqrt(
+            self.hidden_dim // self.num_heads
         )
 
-        # Apply geometric bias to attention weights
-        # This makes the attention mechanism sensitive to the spatial structure of the input
-        attention_weights = attention_weights * torch.exp(-distances)  # Geometric bias
+        # Apply geometric and positional biases
+        attention_weights = attention_weights + geo_weights + pos_weights
 
-        # Apply mask to attention weights
+        # Apply mask
         attention_weights = attention_weights.masked_fill(
-            ~mask.unsqueeze(1), float("-inf")
+            ~mask.unsqueeze(1).unsqueeze(1), float("-inf")
         )
 
         # Compute attention output
-        # Gradient flows through attention_weights to q, k, and through v
         attention_output = torch.einsum(
-            "bij,bjk->bik", F.softmax(attention_weights, dim=-1), v
+            "bhij,bjhd->bihd", F.softmax(attention_weights, dim=-1), v
+        )
+        attention_output = attention_output.reshape(
+            batch_size, seq_len, self.hidden_dim
         )
 
-        # Final projection
-        return self.fc_out(attention_output) * mask.unsqueeze(-1)  # Apply mask
-
-    # Visualization suggestion:
-    # def visualize_attention(self, attention_weights, step):
-    #     plt.figure(figsize=(10, 10))
-    #     plt.imshow(attention_weights[0].detach().cpu().numpy(), cmap='viridis')
-    #     plt.colorbar()
-    #     plt.title(f'Attention Weights at Step {step}')
-    #     plt.xlabel('Key Position')
-    #     plt.ylabel('Query Position')
-    #     plt.show()
+        return self.fc_out(attention_output)
 
 
 class EquivariantFeedforward(nn.Module):
-    def __init__(self, hidden_dim):
+    def __init__(self, hidden_dim, expansion_factor=4):
         super(EquivariantFeedforward, self).__init__()
-        # Two tensor product layers with expansion factor of 4
-        self.fc1 = TensorProductLayer(hidden_dim, 4 * hidden_dim)
-        self.fc2 = TensorProductLayer(4 * hidden_dim, hidden_dim)
+        self.fc1 = nn.Linear(hidden_dim, expansion_factor * hidden_dim)
+        self.fc2 = nn.Linear(expansion_factor * hidden_dim, hidden_dim)
 
     def forward(self, x, mask):
-        # Apply two tensor product layers with ReLU activation
-        # Gradient flows through both layers and ReLU operations
-        return F.relu(self.fc2(F.relu(self.fc1(x, mask)), mask))
+        # x shape: (batch_size, seq_len, hidden_dim)
+        # mask shape: (batch_size, seq_len)
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x * mask.unsqueeze(-1)  # Apply mask
 
 
-class SE3TransformerLayer(nn.Module):
+class MysteryTransformerLayer(nn.Module):
     def __init__(self, hidden_dim, num_heads):
-        super(SE3TransformerLayer, self).__init__()
+        super(MysteryTransformerLayer, self).__init__()
         self.attention = EquivariantAttention(hidden_dim, num_heads)
         self.ffn = EquivariantFeedforward(hidden_dim)
         self.layer_norm1 = nn.LayerNorm(hidden_dim)
         self.layer_norm2 = nn.LayerNorm(hidden_dim)
 
-    def forward(self, x, geometric_features, mask):
+    def forward(self, x, positional_encodings, mask):
+        # x shape: (batch_size, seq_len, hidden_dim)
+        # positional_encodings shape: (seq_len, seq_len, hidden_dim)
+        # mask shape: (batch_size, seq_len)
+
+        batch_size, seq_len, hidden_dim = x.size()
+
+        # Compute pairwise differences for geometric features
+        x_i = x.unsqueeze(2)  # (batch_size, seq_len, 1, hidden_dim)
+        x_j = x.unsqueeze(1)  # (batch_size, 1, seq_len, hidden_dim)
+        diff = x_i - x_j  # (batch_size, seq_len, seq_len, hidden_dim)
+
+        # Euclidean distance (L2 norm)
+        distances = torch.norm(diff, dim=-1)  # (batch_size, seq_len, seq_len)
+
+        # Dot product between pairs
+        # dot_products = torch.einsum('bijd,bijd->bij', diff, diff)  # (batch_size, seq_len, seq_len)
+        dot_products = torch.matmul(diff, diff.transpose(-2, -1)).diagonal(
+            dim1=-2, dim2=-1
+        )  # (batch_size, seq_len, seq_len)
+
+        # Stack distances and dot products
+        geometric_features = torch.stack(
+            [distances, dot_products], dim=-1
+        )  # (batch_size, seq_len, seq_len, 2)
+
         # Attention sub-layer
-        attn_output = self.attention(x, geometric_features, mask)
+        attn_output = self.attention(x, geometric_features, positional_encodings, mask)
         x = self.layer_norm1(x + attn_output)  # Residual connection and normalization
 
-        # Feedforward sublayer
+        # Feedforward sub-layer
         ffn_output = self.ffn(x, mask)
-        return self.layer_norm2(x + ffn_output)  # Residual connection and norm
+        x = self.layer_norm2(x + ffn_output)  # Residual connection and normalization
 
-    # Visualization suggestion:
-    # def visualize_layer_output(self, layer_output, step):
-    #     plt.figure(figsize=(15, 5))
-    #     plt.imshow(layer_output[0].detach().cpu().numpy(), cmap='viridis', aspect='auto')
-    #     plt.colorbar()
-    #     plt.title(f'SE3TransformerLayer Output at Step {step}')
-    #     plt.xlabel('Hidden Dimension')
-    #     plt.ylabel('Sequence Position')
-    #     plt.show()
+        return x
 
 
 class SE3Transformer(nn.Module):
     def __init__(
-        self, input_dim=3, hidden_dim=64, num_heads=8, num_layers=3, num_steps=num_steps
+        self,
+        input_dim=3,
+        hidden_dim=64,
+        num_heads=4,
+        num_layers=3,
+        num_steps=num_steps,
+        max_len=512,
     ):
         super(SE3Transformer, self).__init__()
         self.num_steps = num_steps
@@ -430,13 +404,17 @@ class SE3Transformer(nn.Module):
 
         # Time embedding
         self.time_embedding = nn.Linear(1, hidden_dim)
+
         # Input projection
         self.input_projection = nn.Linear(input_dim + hidden_dim, hidden_dim)
+
+        # SE3 positional encoding
+        self.positional_encoding = SE3PositionalEncoding(hidden_dim, max_len)
 
         # Stack of SE3TransformerLayers
         self.layers = nn.ModuleList(
             [
-                SE3TransformerLayer(hidden_dim=hidden_dim, num_heads=num_heads)
+                MysteryTransformerLayer(hidden_dim=hidden_dim, num_heads=num_heads)
                 for _ in range(num_layers)
             ]
         )
@@ -445,39 +423,33 @@ class SE3Transformer(nn.Module):
         self.fc_out = nn.Linear(hidden_dim, input_dim)
 
     def forward(self, x, t, mask):
+        # x shape: (batch_size, seq_len, input_dim)
+        # t shape: (batch_size,)
+        # mask shape: (batch_size, seq_len)
+
         # Embed and normalize time
-        # Shape: (batch_size, 1)
         t = t.float().view(-1, 1) / float(self.num_steps)
-        # Shape: (batch_size, seq_len, hidden_dim)
         t_embed = F.relu(self.time_embedding(t)).unsqueeze(1).expand(-1, x.shape[1], -1)
 
         # Concatenate time embedding with input and project to hidden_dim
-        # Shape: (batch_size, seq_len, input_dim + hidden_dim)
         x = torch.cat([x, t_embed], dim=-1)
-        # Shape: (batch_size, seq_len, hidden_dim)
         h = F.relu(self.input_projection(x))
 
-        # Extract geometric features (e.g., distances between points)
-        # Shape: (batch_size, seq_len, seq_len)
-        geometric_features = torch.cdist(
-            h[:, :, :3], h[:, :, :3]
-        )  # Using first 3 dims as coordinates
+        # Compute positional encodings
+        positional_encodings = self.positional_encoding(h)
 
         # Apply SE3TransformerLayers
         for layer in self.layers:
-            h = layer(h, geometric_features, mask)
+            h = layer(h, positional_encodings, mask)
 
         # Final output projection
-        # Shape: (batch_size, seq_len, input_dim)
         out = self.fc_out(h)
         return out * mask.unsqueeze(-1)  # Apply mask to output
 
-    # Visualization suggestion:
-    # def visualize_model_output(self, model_output, step):
-    #     plt.figure(figsize=(15, 5))
-    #     plt.imshow(model_output[0].detach().cpu().numpy(), cmap='viridis', aspect='auto')
-    #     plt.colorbar()
-    #     plt.title(f'SE3Transformer Output at Step {step}')
-    #     plt.xlabel('Output Dimension')
-    #     plt.ylabel('Sequence Position')
-    #     plt.show()
+
+# Example usage:
+# model = SE3Transformer(input_dim=3, hidden_dim=64, num_heads=8, num_layers=3, num_steps=100, feature_dim=16, max_len=1000)
+# x = torch.randn(32, 100, 3)  # (batch_size, seq_len, input_dim)
+# t = torch.randint(0, 100, (32,))  # (batch_size,)
+# mask = torch.ones(32, 100, dtype=torch.bool)  # (batch_size, seq_len)
+# output = model(x, t, mask)

@@ -24,8 +24,20 @@ class ProteinDataset(Dataset):
                 for residue in chain:
                     if "CA" in residue:
                         coords.append(residue["CA"].get_coord())
-        coords = torch.tensor(np.array(coords[:self.max_length]), dtype=torch.float32)
-        return coords
+        coords = torch.tensor(np.array(coords[: self.max_length]), dtype=torch.float32)
+        mask = torch.ones(len(coords), dtype=bool)
+
+        # Pad if necessary
+        if len(coords) < self.max_length:
+            pad_size = self.max_length - len(coords)
+            coords = np.pad(
+                coords, ((0, pad_size), (0, 0)), mode="constant", constant_values=0
+            )
+            mask = np.pad(mask, (0, pad_size), mode="constant", constant_values=False)
+            coords = torch.tensor(coords, dtype=torch.float32)
+            mask = torch.tensor(mask, dtype=torch.bool)
+
+        return coords, mask
 
 
 class InMemoryProteinDataset(Dataset):
@@ -45,7 +57,9 @@ class InMemoryProteinDataset(Dataset):
                     for residue in chain:
                         if "CA" in residue:
                             coords.append(residue["CA"].get_coord())
-            coords = torch.tensor(np.array(coords[:self.max_length]), dtype=torch.float32)
+            coords = torch.tensor(
+                np.array(coords[: self.max_length]), dtype=torch.float32
+            )
             self.samples.append(coords)
 
     def __len__(self):
@@ -56,13 +70,6 @@ class InMemoryProteinDataset(Dataset):
 
 
 def pad_collate_fn(batch):
-    """Pad input tensors with zeros to the maximum length of the biggest input"""
-    max_len = max(coords.shape[0] for coords in batch)
-    padded_batch = []
-    for coords in batch:
-        pad_size = max_len - coords.shape[0]
-        padded_coords = torch.nn.functional.pad(
-            coords, (0, 0, 0, pad_size), mode="constant", value=0
-        )
-        padded_batch.append(padded_coords)
-    return torch.stack(padded_batch, dim=0)
+    # No need for additional padding as it's done in __getitem__
+    coords, masks = zip(*batch)
+    return torch.stack(coords, dim=0), torch.stack(masks, dim=0)

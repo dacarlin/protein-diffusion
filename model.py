@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import math
 
 
-num_steps = 200
+num_steps = 1000
 
 
 def sample_protein(model, diffusion, length, device):
@@ -341,9 +341,9 @@ class EquivariantFeedforward(nn.Module):
         return x * mask.unsqueeze(-1)  # Apply mask
 
 
-class MysteryTransformerLayer(nn.Module):
+class SE3TransformerLayer(nn.Module):
     def __init__(self, hidden_dim, num_heads):
-        super(MysteryTransformerLayer, self).__init__()
+        super(SE3TransformerLayer, self).__init__()
         self.attention = EquivariantAttention(hidden_dim, num_heads)
         self.ffn = EquivariantFeedforward(hidden_dim)
         self.layer_norm1 = nn.LayerNorm(hidden_dim)
@@ -414,7 +414,7 @@ class SE3Transformer(nn.Module):
         # Stack of SE3TransformerLayers
         self.layers = nn.ModuleList(
             [
-                MysteryTransformerLayer(hidden_dim=hidden_dim, num_heads=num_heads)
+                SE3TransformerLayer(hidden_dim=hidden_dim, num_heads=num_heads)
                 for _ in range(num_layers)
             ]
         )
